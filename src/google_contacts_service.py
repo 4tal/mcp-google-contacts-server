@@ -18,6 +18,15 @@ class GoogleContactsError(Exception):
 class GoogleContactsService:
     """Service to interact with Google Contacts API."""
     
+    # Extended person fields for comprehensive contact information
+    PERSON_FIELDS = [
+        'names', 'emailAddresses', 'phoneNumbers', 'addresses', 'birthdays',
+        'organizations', 'occupations', 'urls', 'biographies', 'relations',
+        'nicknames', 'events', 'userDefined', 'sipAddresses', 'imClients',
+        'photos', 'memberships', 'miscKeywords', 'interests', 'skills',
+        'braggingRights', 'taglines', 'coverPhotos', 'locales', 'externalIds'
+    ]
+    
     def __init__(self, credentials_info: Optional[Dict[str, Any]] = None, token_path: Optional[Path] = None):
         """Initialize the Google Contacts service with credentials info.
         
@@ -155,12 +164,13 @@ class GoogleContactsService:
             raise GoogleContactsError(f"Authentication failed: {str(e)}")
     
     def list_contacts(self, name_filter: Optional[str] = None, 
-                     max_results: int = None) -> List[Dict[str, Any]]:
-        """List contacts, optionally filtering by name.
+                     max_results: int = None, include_all_fields: bool = False) -> List[Dict[str, Any]]:
+        """List contacts, optionally filtering by name with pagination support.
         
         Args:
             name_filter: Optional filter to find contacts by name
             max_results: Maximum number of results to return
+            include_all_fields: Whether to include all contact fields
             
         Returns:
             List of contact dictionaries
@@ -171,188 +181,251 @@ class GoogleContactsService:
         max_results = max_results or config.default_max_results
         
         try:
-            # Get list of connections (contacts)
-            results = self.service.people().connections().list(
-                resourceName='people/me',
-                pageSize=max_results,
-                personFields='names,emailAddresses,phoneNumbers',
-                sortOrder='FIRST_NAME_ASCENDING'
-            ).execute()
-            
-            connections = results.get('connections', [])
-            
-            if not connections:
-                return []
-            
             contacts = []
-            for person in connections:
-                names = person.get('names', [])
-                if not names:
-                    continue
+            next_page_token = None
+            
+            # Use extended fields if requested
+            person_fields = ','.join(self.PERSON_FIELDS) if include_all_fields else 'names,emailAddresses,phoneNumbers,addresses,organizations,birthdays,urls,biographies,relations,nicknames'
+            
+            while len(contacts) < max_results:
+                page_size = min(1000, max_results - len(contacts))  # Google API limit is 1000
                 
-                name = names[0]
-                given_name = name.get('givenName', '')
-                family_name = name.get('familyName', '')
-                display_name = name.get('displayName', '')
+                request_params = {
+                    'resourceName': 'people/me',
+                    'pageSize': page_size,
+                    'personFields': person_fields,
+                    'sortOrder': 'DISPLAY_NAME_ASCENDING'
+                }
                 
-                # Apply name filter if provided
-                if name_filter and name_filter.lower() not in display_name.lower():
-                    continue
+                if next_page_token:
+                    request_params['pageToken'] = next_page_token
                 
-                # Get email addresses
-                emails = person.get('emailAddresses', [])
-                email = emails[0].get('value') if emails else None
+                results = self.service.people().connections().list(**request_params).execute()
                 
-                # Get phone numbers
-                phones = person.get('phoneNumbers', [])
-                phone = phones[0].get('value') if phones else None
+                connections = results.get('connections', [])
+                if not connections:
+                    break
                 
-                contacts.append({
-                    'resourceName': person.get('resourceName'),
-                    'givenName': given_name,
-                    'familyName': family_name,
-                    'displayName': display_name,
-                    'email': email,
-                    'phone': phone
-                })
+                for person in connections:
+                    contact = self._format_contact_enhanced(person)
+                    
+                    # Apply name filter if provided
+                    if name_filter:
+                        filter_lower = name_filter.lower()
+                        if not any(filter_lower in str(contact.get(field, '')).lower() 
+                                 for field in ['displayName', 'givenName', 'familyName', 'nickname']):
+                            continue
+                    
+                    contacts.append(contact)
+                    
+                    if len(contacts) >= max_results:
+                        break
+                
+                next_page_token = results.get('nextPageToken')
+                if not next_page_token:
+                    break
             
             return contacts
         
         except HttpError as error:
             raise GoogleContactsError(f"Error listing contacts: {error}")
     
-    def get_contact(self, identifier: str, include_email: bool = True, 
-                   use_directory_api: bool = False) -> Dict[str, Any]:
-        """Get a contact by resource name or email.
+    def search_contacts(self, query: str, max_results: int = 50, 
+                       search_fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """Enhanced search functionality with server-side filtering and multiple field support.
+        
+        Args:
+            query: Search term
+            max_results: Maximum number of results
+            search_fields: Specific fields to search in
+            
+        Returns:
+            List of matching contact dictionaries
+        """
+        try:
+            # Use the searchContacts API endpoint for better search
+            # Note: This is a newer API that might not be available in all regions
+            search_request = {
+                'query': query,
+                'readMask': ','.join(self.PERSON_FIELDS),
+                'pageSize': min(max_results, 50)  # API limit for search
+            }
+            
+            try:
+                # Try the new search API first
+                response = self.service.people().searchContacts(**search_request).execute()
+                results = response.get('results', [])
+                
+                contacts = []
+                for result in results:
+                    person = result.get('person', {})
+                    if person:
+                        contact = self._format_contact_enhanced(person)
+                        contacts.append(contact)
+                
+                return contacts[:max_results]
+                
+            except HttpError as search_error:
+                # Fallback to manual search if the search API isn't available
+                print(f"Search API not available, falling back to manual search: {search_error}")
+                return self._manual_search_contacts(query, max_results, search_fields)
+        
+        except Exception as error:
+            raise GoogleContactsError(f"Error searching contacts: {error}")
+    
+    def _manual_search_contacts(self, query: str, max_results: int = 50, 
+                               search_fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """Fallback manual search with enhanced field matching."""
+        # Get a larger set of contacts to search through
+        all_contacts = self.list_contacts(max_results=max_results * 3, include_all_fields=True)
+        
+        query_lower = query.lower()
+        matches = []
+        
+        # Default search fields
+        if not search_fields:
+            search_fields = ['displayName', 'givenName', 'familyName', 'nickname', 'emails', 'phones', 'organization', 'jobTitle']
+        
+        for contact in all_contacts:
+            match_found = False
+            
+            for field in search_fields:
+                field_value = contact.get(field, '')
+                
+                # Handle list fields (emails, phones, etc.)
+                if isinstance(field_value, list):
+                    for item in field_value:
+                        if query_lower in str(item).lower():
+                            match_found = True
+                            break
+                # Handle string fields
+                elif field_value and query_lower in str(field_value).lower():
+                    match_found = True
+                    break
+            
+            if match_found:
+                matches.append(contact)
+                if len(matches) >= max_results:
+                    break
+        
+        return matches
+    
+    def get_contact(self, identifier: str, include_all_fields: bool = True) -> Dict[str, Any]:
+        """Get a contact by resource name or email with comprehensive field support.
         
         Args:
             identifier: Resource name (people/*) or email address
-            include_email: Whether to include email addresses
-            use_directory_api: Whether to try the directory API as well
+            include_all_fields: Whether to include all available fields
             
         Returns:
-            Contact dictionary
-            
-        Raises:
-            GoogleContactsError: If contact cannot be found or API request fails
+            Contact dictionary with comprehensive information
         """
         try:
+            person_fields = ','.join(self.PERSON_FIELDS) if include_all_fields else 'names,emailAddresses,phoneNumbers,addresses,organizations'
+            
             if identifier.startswith('people/'):
-                # Determine which API to use based on parameters
-                if use_directory_api:
-                    # For directory contacts
-                    try:
-                        person = self.service.people().people().get(
-                            resourceName=identifier,
-                            personFields='names,emailAddresses,phoneNumbers,organizations'
-                        ).execute()
-                    except HttpError:
-                        # Fall back to standard contacts API if directory API fails
-                        person = self.service.people().get(
-                            resourceName=identifier,
-                            personFields='names,emailAddresses,phoneNumbers'
-                        ).execute()
-                else:
-                    # Standard contacts API
-                    person = self.service.people().get(
-                        resourceName=identifier,
-                        personFields='names,emailAddresses,phoneNumbers'
-                    ).execute()
+                # Get by resource name
+                person = self.service.people().get(
+                    resourceName=identifier,
+                    personFields=person_fields
+                ).execute()
                 
-                return self._format_contact(person)
+                return self._format_contact_enhanced(person)
             else:
-                # Assume it's an email address and search for it
-                contacts = self.list_contacts()
-                for contact in contacts:
-                    if contact.get('email') == identifier:
-                        return contact
+                # Search by email
+                contacts = self.search_contacts(identifier, max_results=1)
+                if contacts:
+                    return contacts[0]
                 
-                # If not found in regular contacts, try directory
-                if use_directory_api:
-                    directory_users = self.list_directory_people(query=identifier, max_results=1)
-                    if directory_users:
-                        return directory_users[0]
-                
-                raise GoogleContactsError(f"Contact with email {identifier} not found")
+                raise GoogleContactsError(f"Contact with identifier {identifier} not found")
         
         except HttpError as error:
             raise GoogleContactsError(f"Error getting contact: {error}")
     
-    def create_contact(self, given_name: str, family_name: Optional[str] = None, 
-                       email: Optional[str] = None, phone: Optional[str] = None) -> Dict:
-        """Create a new contact."""
+    def create_contact(self, contact_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new contact with comprehensive field support.
+        
+        Args:
+            contact_data: Dictionary containing contact information
+            
+        Returns:
+            Created contact dictionary
+        """
         try:
-            contact_body = {
-                'names': [
-                    {
-                        'givenName': given_name,
-                        'familyName': family_name or ''
-                    }
-                ]
-            }
-            
-            if email:
-                contact_body['emailAddresses'] = [{'value': email}]
-            
-            if phone:
-                contact_body['phoneNumbers'] = [{'value': phone}]
+            contact_body = self._build_contact_body(contact_data)
             
             person = self.service.people().createContact(
                 body=contact_body
             ).execute()
             
-            return self._format_contact(person)
+            return self._format_contact_enhanced(person)
         
         except HttpError as error:
             raise GoogleContactsError(f"Error creating contact: {error}")
     
-    def update_contact(self, resource_name: str, given_name: Optional[str] = None, 
-                      family_name: Optional[str] = None, email: Optional[str] = None,
-                      phone: Optional[str] = None) -> Dict:
-        """Update an existing contact."""
+    def update_contact(self, resource_name: str, contact_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing contact with comprehensive field support.
+        
+        Args:
+            resource_name: Contact resource name
+            contact_data: Dictionary containing updated contact information
+            
+        Returns:
+            Updated contact dictionary
+        """
         try:
-            # Get the etag for the contact first
-            person = self.service.people().get(
+            # Get current contact for etag
+            current_person = self.service.people().get(
                 resourceName=resource_name,
-                personFields='names,emailAddresses,phoneNumbers'
+                personFields=','.join(self.PERSON_FIELDS)
             ).execute()
             
-            etag = person.get('etag')
+            etag = current_person.get('etag')
             
-            # Prepare update masks and body
-            update_person = {'etag': etag, 'resourceName': resource_name}
-            update_fields = []
+            # Build update body using the same logic as create
+            update_body = self._build_contact_body(contact_data, current_person)
+            update_body['etag'] = etag
+            update_body['resourceName'] = resource_name
             
-            # Update name if provided
-            if given_name or family_name:
-                current_name = person.get('names', [{}])[0]
-                update_person['names'] = [{
-                    'givenName': given_name if given_name is not None else current_name.get('givenName', ''),
-                    'familyName': family_name if family_name is not None else current_name.get('familyName', '')
-                }]
-                update_fields.append('names')
+            # Map input fields to API fields for updatePersonFields
+            field_mapping = {
+                'given_name': 'names',
+                'family_name': 'names', 
+                'nickname': 'nicknames',
+                'email': 'emailAddresses',
+                'emails': 'emailAddresses',
+                'phone': 'phoneNumbers',
+                'phones': 'phoneNumbers',
+                'address': 'addresses',
+                'addresses': 'addresses',
+                'organization': 'organizations',
+                'job_title': 'organizations',
+                'birthday': 'birthdays',
+                'website': 'urls',
+                'urls': 'urls',
+                'notes': 'biographies',
+                'relations': 'relations',
+                'events': 'events',
+                'custom_fields': 'userDefined'
+            }
             
-            # Update email if provided
-            if email:
-                update_person['emailAddresses'] = [{'value': email}]
-                update_fields.append('emailAddresses')
+            # Determine which API fields to update based on input
+            update_fields = set()
+            for input_field in contact_data.keys():
+                if input_field in field_mapping:
+                    update_fields.add(field_mapping[input_field])
             
-            # Update phone if provided
-            if phone:
-                update_person['phoneNumbers'] = [{'value': phone}]
-                update_fields.append('phoneNumbers')
+            if not update_fields:
+                return self._format_contact_enhanced(current_person)
             
             # Execute update
-            if update_fields:
-                updated_person = self.service.people().updateContact(
-                    resourceName=resource_name,
-                    updatePersonFields=','.join(update_fields),
-                    body=update_person
-                ).execute()
-                
-                return self._format_contact(updated_person)
-            else:
-                return self._format_contact(person)
+            updated_person = self.service.people().updateContact(
+                resourceName=resource_name,
+                updatePersonFields=','.join(update_fields),
+                body=update_body
+            ).execute()
+            
+            return self._format_contact_enhanced(updated_person)
         
         except HttpError as error:
             raise GoogleContactsError(f"Error updating contact: {error}")
@@ -547,3 +620,298 @@ class GoogleContactsService:
             'department': department,
             'jobTitle': job_title
         }
+    
+    def _build_contact_body(self, contact_data: Dict[str, Any], 
+                           current_person: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Build contact body for create/update operations with comprehensive field support."""
+        body = {}
+        
+        # Names
+        if 'given_name' in contact_data or 'family_name' in contact_data:
+            names = []
+            if current_person and current_person.get('names'):
+                names = current_person['names'].copy()
+            
+            if not names:
+                names = [{}]
+            
+            if 'given_name' in contact_data:
+                names[0]['givenName'] = contact_data['given_name']
+            if 'family_name' in contact_data:
+                names[0]['familyName'] = contact_data['family_name']
+                
+            body['names'] = names
+        
+        # Nicknames
+        if 'nickname' in contact_data:
+            body['nicknames'] = [{'value': contact_data['nickname']}]
+        
+        # Email addresses (support multiple)
+        if 'emails' in contact_data:
+            emails = []
+            for email_data in contact_data['emails']:
+                if isinstance(email_data, str):
+                    emails.append({'value': email_data})
+                else:
+                    emails.append(email_data)
+            body['emailAddresses'] = emails
+        elif 'email' in contact_data:
+            # For single email updates, preserve existing emails or create new
+            if current_person and current_person.get('emailAddresses'):
+                emails = current_person['emailAddresses'].copy()
+                # Update the first email or add if none exist
+                if emails:
+                    emails[0]['value'] = contact_data['email']
+                else:
+                    emails = [{'value': contact_data['email']}]
+            else:
+                emails = [{'value': contact_data['email']}]
+            body['emailAddresses'] = emails
+        
+        # Phone numbers (support multiple)
+        if 'phones' in contact_data:
+            phones = []
+            for phone_data in contact_data['phones']:
+                if isinstance(phone_data, str):
+                    phones.append({'value': phone_data})
+                else:
+                    phones.append(phone_data)
+            body['phoneNumbers'] = phones
+        elif 'phone' in contact_data:
+            # For single phone updates, preserve existing phones or create new
+            if current_person and current_person.get('phoneNumbers'):
+                phones = current_person['phoneNumbers'].copy()
+                # Update the first phone or add if none exist
+                if phones:
+                    phones[0]['value'] = contact_data['phone']
+                else:
+                    phones = [{'value': contact_data['phone']}]
+            else:
+                phones = [{'value': contact_data['phone']}]
+            body['phoneNumbers'] = phones
+        
+        # Addresses
+        if 'addresses' in contact_data:
+            addresses = []
+            for addr_data in contact_data['addresses']:
+                if isinstance(addr_data, str):
+                    addresses.append({'formattedValue': addr_data})
+                else:
+                    addresses.append(addr_data)
+            body['addresses'] = addresses
+        elif 'address' in contact_data:
+            body['addresses'] = [{'formattedValue': contact_data['address']}]
+        
+        # Organizations
+        if 'organization' in contact_data or 'job_title' in contact_data:
+            # Preserve existing organization data when updating
+            if current_person and current_person.get('organizations'):
+                org = current_person['organizations'][0].copy()
+            else:
+                org = {}
+            
+            if 'organization' in contact_data:
+                org['name'] = contact_data['organization']
+            if 'job_title' in contact_data:
+                org['title'] = contact_data['job_title']
+            body['organizations'] = [org]
+        
+        # Birthday
+        if 'birthday' in contact_data:
+            birthday_data = contact_data['birthday']
+            if isinstance(birthday_data, str):
+                # Parse string format like "1990-01-15"
+                parts = birthday_data.split('-')
+                if len(parts) == 3:
+                    body['birthdays'] = [{
+                        'date': {
+                            'year': int(parts[0]),
+                            'month': int(parts[1]),
+                            'day': int(parts[2])
+                        }
+                    }]
+            else:
+                body['birthdays'] = [birthday_data]
+        
+        # URLs
+        if 'urls' in contact_data:
+            urls = []
+            for url_data in contact_data['urls']:
+                if isinstance(url_data, str):
+                    urls.append({'value': url_data})
+                else:
+                    urls.append(url_data)
+            body['urls'] = urls
+        elif 'website' in contact_data:
+            body['urls'] = [{'value': contact_data['website']}]
+        
+        # Biography/Notes
+        if 'notes' in contact_data:
+            body['biographies'] = [{'value': contact_data['notes']}]
+        
+        # Relations
+        if 'relations' in contact_data:
+            relations = []
+            for rel_data in contact_data['relations']:
+                if isinstance(rel_data, str):
+                    relations.append({'person': rel_data})
+                else:
+                    relations.append(rel_data)
+            body['relations'] = relations
+        
+        # Events (like anniversaries)
+        if 'events' in contact_data:
+            body['events'] = contact_data['events']
+        
+        # Custom fields
+        if 'custom_fields' in contact_data:
+            body['userDefined'] = contact_data['custom_fields']
+        
+        return body
+    
+    def _format_contact_enhanced(self, person: Dict[str, Any]) -> Dict[str, Any]:
+        """Format a Google People API person object into a comprehensive contact dictionary."""
+        contact = {
+            'resourceName': person.get('resourceName'),
+            'etag': person.get('etag')
+        }
+        
+        # Names
+        names = person.get('names', [])
+        if names:
+            name = names[0]
+            contact.update({
+                'givenName': name.get('givenName', ''),
+                'familyName': name.get('familyName', ''),
+                'displayName': name.get('displayName', ''),
+                'middleName': name.get('middleName', ''),
+                'honorificPrefix': name.get('honorificPrefix', ''),
+                'honorificSuffix': name.get('honorificSuffix', '')
+            })
+        
+        # Nicknames
+        nicknames = person.get('nicknames', [])
+        if nicknames:
+            contact['nickname'] = nicknames[0].get('value', '')
+        
+        # Email addresses
+        emails = person.get('emailAddresses', [])
+        contact['emails'] = []
+        for email in emails:
+            contact['emails'].append({
+                'value': email.get('value', ''),
+                'type': email.get('type', ''),
+                'label': email.get('formattedType', '')
+            })
+        # Keep backward compatibility
+        if emails:
+            contact['email'] = emails[0].get('value', '')
+        
+        # Phone numbers
+        phones = person.get('phoneNumbers', [])
+        contact['phones'] = []
+        for phone in phones:
+            contact['phones'].append({
+                'value': phone.get('value', ''),
+                'type': phone.get('type', ''),
+                'label': phone.get('formattedType', '')
+            })
+        # Keep backward compatibility
+        if phones:
+            contact['phone'] = phones[0].get('value', '')
+        
+        # Addresses
+        addresses = person.get('addresses', [])
+        contact['addresses'] = []
+        for addr in addresses:
+            contact['addresses'].append({
+                'formatted': addr.get('formattedValue', ''),
+                'type': addr.get('type', ''),
+                'street': addr.get('streetAddress', ''),
+                'city': addr.get('city', ''),
+                'region': addr.get('region', ''),
+                'postal_code': addr.get('postalCode', ''),
+                'country': addr.get('country', '')
+            })
+        
+        # Organizations
+        organizations = person.get('organizations', [])
+        if organizations:
+            org = organizations[0]
+            contact.update({
+                'organization': org.get('name', ''),
+                'jobTitle': org.get('title', ''),
+                'department': org.get('department', '')
+            })
+        
+        # Birthday
+        birthdays = person.get('birthdays', [])
+        if birthdays:
+            birthday = birthdays[0].get('date', {})
+            if birthday:
+                contact['birthday'] = {
+                    'year': birthday.get('year'),
+                    'month': birthday.get('month'),
+                    'day': birthday.get('day')
+                }
+        
+        # URLs
+        urls = person.get('urls', [])
+        contact['urls'] = []
+        for url in urls:
+            contact['urls'].append({
+                'value': url.get('value', ''),
+                'type': url.get('type', ''),
+                'label': url.get('formattedType', '')
+            })
+        
+        # Biography/Notes
+        biographies = person.get('biographies', [])
+        if biographies:
+            contact['notes'] = biographies[0].get('value', '')
+        
+        # Relations
+        relations = person.get('relations', [])
+        contact['relations'] = []
+        for relation in relations:
+            contact['relations'].append({
+                'person': relation.get('person', ''),
+                'type': relation.get('type', ''),
+                'label': relation.get('formattedType', '')
+            })
+        
+        # Events
+        events = person.get('events', [])
+        contact['events'] = []
+        for event in events:
+            event_data = {
+                'type': event.get('type', ''),
+                'label': event.get('formattedType', '')
+            }
+            if event.get('date'):
+                event_data['date'] = event['date']
+            contact['events'].append(event_data)
+        
+        # Custom fields
+        custom_fields = person.get('userDefined', [])
+        contact['customFields'] = []
+        for field in custom_fields:
+            contact['customFields'].append({
+                'key': field.get('key', ''),
+                'value': field.get('value', '')
+            })
+        
+        # Photos
+        photos = person.get('photos', [])
+        if photos:
+            contact['photoUrl'] = photos[0].get('url', '')
+        
+        # Memberships (contact groups)
+        memberships = person.get('memberships', [])
+        contact['groups'] = []
+        for membership in memberships:
+            contact['groups'].append({
+                'resourceName': membership.get('contactGroupMembership', {}).get('contactGroupResourceName', '')
+            })
+        
+        return contact
