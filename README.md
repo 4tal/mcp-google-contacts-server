@@ -25,7 +25,7 @@ A Machine Conversation Protocol (MCP) server that provides comprehensive Google 
 1. **Clone and install:**
 
    ```bash
-   git clone https://github.com/rayanzaki/mcp-google-contacts-server.git
+   git clone git@github.com:4tal/mcp-google-contacts-server.git
    cd mcp-google-contacts-server
    
    # Using uv (recommended)
