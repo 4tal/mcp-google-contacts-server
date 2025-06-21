@@ -1,14 +1,53 @@
-# 📇 MCP Google Contacts Server
+# 📇 MCP Google Contacts Server - Enhanced Edition
 
-A Machine Conversation Protocol (MCP) server that provides Google Contacts functionality, allowing AI assistants to manage contacts, search your organization's directory, and interact with Google Workspace.
+A comprehensive Machine Conversation Protocol (MCP) server that provides full Google Contacts functionality, allowing AI assistants to manage contacts with complete field support, advanced search capabilities, and efficient handling of large contact lists.
+
+## 🆕 What's New in Enhanced Edition
+
+### ✅ **Fixed Search Issues**
+- **Server-side search** with Google's searchContacts API
+- **Enhanced fallback search** with comprehensive field matching
+- **Proper name filtering** that actually works
+- **Phone number search** support
+- **Organization and job title search**
+- **Multi-field search capabilities**
+
+### ✅ **Comprehensive Field Support**
+Now supports **25+ contact fields** including:
+- ✅ Multiple emails with labels (home/work/mobile)
+- ✅ Multiple phone numbers with labels  
+- ✅ Multiple addresses (home/work/other)
+- ✅ Organization details (company, job title, department)
+- ✅ Birthday and anniversary dates
+- ✅ Websites and social media URLs
+- ✅ Notes and biography
+- ✅ Relationships (spouse, family, colleagues)
+- ✅ Nicknames and alternate names
+- ✅ Custom fields and tags
+- ✅ Photo URLs
+- ✅ Contact groups membership
+
+### ✅ **Performance Improvements**
+- **Pagination support** for large contact lists (1000+ contacts)
+- **Efficient API usage** with proper field selection
+- **Smart caching** and reduced API calls
+- **Bulk operations** support
+
+### ✅ **Enhanced User Experience**
+- **Rich formatting** with emojis and structured display
+- **Contact statistics** and summaries
+- **Detailed error handling** and informative messages
+- **Backward compatibility** with existing tools
 
 ## ✨ Features
 
-- List and search Google Contacts
-- Create, update, and delete contacts
-- Search Google Workspace directory
-- View "Other Contacts" (people you've interacted with but haven't added)
-- Access Google Workspace users in your organization
+- **Advanced Search**: Server-side and client-side search with multi-field support
+- **Complete CRUD Operations**: Create, read, update, delete with full field support
+- **Multiple Contact Types**: Personal contacts, workspace directory, "other contacts"
+- **Comprehensive Field Support**: 25+ contact fields including relationships, events, addresses
+- **Smart Formatting**: Rich, emoji-enhanced display with contact statistics
+- **Efficient Pagination**: Handle thousands of contacts efficiently
+- **Google Workspace Integration**: Directory search and user management
 
 ## 🚀 Installation
 
@@ -138,143 +177,184 @@ To use this server with MCP clients (like Anthropic's Claude with Cline), add it
 
 ## 🧰 Available Tools
 
-This MCP server provides the following tools:
+### 🔍 **Search & List Tools**
 
-| Tool | Description |
-|------|-------------|
-| `list_contacts` | List all contacts or filter by name |
-| `get_contact` | Get a contact by resource name or email |
-| `create_contact` | Create a new contact |
-| `update_contact` | Update an existing contact |
-| `delete_contact` | Delete a contact by resource name |
-| `search_contacts` | Search contacts by name, email, or phone number |
-| `list_workspace_users` | List Google Workspace users in your organization's directory |
-| `search_directory` | Search for people in the Google Workspace directory |
-| `get_other_contacts` | Retrieve contacts from the 'Other contacts' section |
+| Tool | Description | Enhanced Features |
+|------|-------------|-------------------|
+| `list_contacts` | List all contacts with optional filtering | ✅ Pagination, ✅ All fields, ✅ Smart filtering |
+| `search_contacts` | Advanced multi-field search | ✅ Server-side search, ✅ Phone search, ✅ Organization search |
+| `get_contact` | Get detailed contact information | ✅ All 25+ fields, ✅ Rich formatting |
 
-### 🔍 Detailed Tool Descriptions
+### ✏️ **CRUD Operations**
 
-#### 📋 `list_contacts`
-Lists all your Google contacts or filters them by name.
+| Tool | Description | Enhanced Features |
+|------|-------------|-------------------|
+| `create_contact` | Create contact with basic fields | ✅ 11 fields supported |
+| `create_contact_advanced` | Create contact with full field support | ✅ All fields, ✅ Multiple emails/phones/addresses |
+| `update_contact` | Update contact with basic fields | ✅ 11 fields supported |
+| `update_contact_advanced` | Update contact with full field support | ✅ All fields, ✅ Complex data structures |
+| `delete_contact` | Delete a contact | ✅ Enhanced error handling |
 
-**Parameters:**
-- `name_filter` (optional): String to filter contacts by name
-- `max_results` (optional): Maximum number of contacts to return (default: 100)
+### 🏢 **Google Workspace Tools**
 
-**Example:**
+| Tool | Description | Features |
+|------|-------------|----------|
+| `list_workspace_users` | List organization directory | ✅ Enhanced search, ✅ Rich formatting |
+| `search_directory` | Search workspace directory | ✅ Advanced filtering |
+| `get_other_contacts` | Get "other contacts" | ✅ Statistics, ✅ Enhanced display |
+
+## 🔧 **Detailed Tool Usage**
+
+### 🔍 **Enhanced Search Examples**
+
 ```python
-list_contacts(name_filter="John", max_results=10)
+# Basic search (works with names, emails, phones, organizations)
+search_contacts("john smith")
+
+# Search specific fields
+search_contacts("engineer", search_fields=["jobTitle", "organization"])
+
+# Search phone numbers (now works!)
+search_contacts("+1234567890")
+
+# Search with higher result limit
+search_contacts("gmail.com", max_results=100)
 ```
 
-#### 👤 `get_contact`
-Retrieves detailed information about a specific contact.
+### ✏️ **Advanced Contact Creation**
 
-**Parameters:**
-- `identifier`: Resource name (people/*) or email address of the contact
-
-**Example:**
 ```python
-get_contact("john.doe@example.com")
-# or
-get_contact("people/c12345678901234567")
+# Basic contact creation (now supports 11 fields)
+create_contact(
+    given_name="John",
+    family_name="Smith", 
+    email="john@example.com",
+    phone="+1-555-123-4567",
+    organization="Acme Corp",
+    job_title="Software Engineer",
+    address="123 Main St, City, State 12345",
+    birthday="1990-01-15",
+    website="https://johnsmith.dev",
+    notes="Met at tech conference",
+    nickname="Johnny"
+)
+
+# Advanced contact with multiple fields
+create_contact_advanced({
+    "given_name": "Jane",
+    "family_name": "Doe",
+    "emails": [
+        {"value": "jane@work.com", "type": "work"},
+        {"value": "jane@personal.com", "type": "home"}
+    ],
+    "phones": [
+        {"value": "+1-555-111-2222", "type": "mobile"},
+        {"value": "+1-555-333-4444", "type": "work"}
+    ],
+    "addresses": [
+        {"formatted": "456 Work Ave, Business City, ST 67890", "type": "work"},
+        {"formatted": "789 Home St, Hometown, ST 12345", "type": "home"}
+    ],
+    "organization": "Tech Innovations Inc",
+    "job_title": "Senior Developer",
+    "birthday": "1985-03-22",
+    "relations": [
+        {"person": "John Doe", "type": "spouse"}
+    ],
+    "urls": [
+        {"value": "https://linkedin.com/in/janedoe", "type": "profile"},
+        {"value": "https://janedoe.dev", "type": "homepage"}
+    ],
+    "custom_fields": [
+        {"key": "Employee ID", "value": "EMP12345"},
+        {"key": "Department", "value": "Engineering"}
+    ]
+})
 ```
 
-#### ➕ `create_contact`
-Creates a new contact in your Google Contacts.
+### 📊 **Smart Contact Listing**
 
-**Parameters:**
-- `given_name`: First name of the contact
-- `family_name` (optional): Last name of the contact
-- `email` (optional): Email address of the contact
-- `phone` (optional): Phone number of the contact
-
-**Example:**
 ```python
-create_contact(given_name="Jane", family_name="Smith", email="jane.smith@example.com", phone="+1-555-123-4567")
+# List with comprehensive fields
+list_contacts(max_results=50, include_all_fields=True)
+
+# Efficient filtering (now actually works!)
+list_contacts(name_filter="Smith", max_results=20)
+
+# Get statistics about your contacts
+list_contacts(max_results=1000)  # Shows statistics at the bottom
 ```
 
-#### ✏️ `update_contact`
-Updates an existing contact with new information.
+## 📊 **Field Support Comparison**
 
-**Parameters:**
-- `resource_name`: Contact resource name (people/*)
-- `given_name` (optional): Updated first name
-- `family_name` (optional): Updated last name
-- `email` (optional): Updated email address
-- `phone` (optional): Updated phone number
-
-**Example:**
-```python
-update_contact(resource_name="people/c12345678901234567", email="new.email@example.com")
+### ❌ **Before (Limited)**
+```
+❌ Only 4 fields: given_name, family_name, email, phone
+❌ Single email/phone only
+❌ No addresses, birthdays, organizations
+❌ No relationships or custom fields
+❌ Basic search only
+❌ No pagination
 ```
 
-#### 🗑️ `delete_contact`
-Deletes a contact from your Google Contacts.
-
-**Parameters:**
-- `resource_name`: Contact resource name (people/*) to delete
-
-**Example:**
-```python
-delete_contact(resource_name="people/c12345678901234567")
+### ✅ **After (Comprehensive)**
+```
+✅ 25+ fields supported
+✅ Multiple emails/phones with labels
+✅ Full address support
+✅ Birthday and event dates
+✅ Organization details
+✅ Relationships and custom fields
+✅ Advanced multi-field search
+✅ Efficient pagination
+✅ Rich formatting with statistics
 ```
 
-#### 🔍 `search_contacts`
-Searches your contacts by name, email, or phone number.
+## 🚨 **Migration from Old Version**
 
-**Parameters:**
-- `query`: Search term to find in contacts
-- `max_results` (optional): Maximum number of results to return (default: 10)
+The enhanced version is **100% backward compatible**. All existing tools work exactly the same, but now:
 
-**Example:**
-```python
-search_contacts(query="john", max_results=5)
-```
-
-#### 🏢 `list_workspace_users`
-Lists Google Workspace users in your organization's directory.
-
-**Parameters:**
-- `query` (optional): Search term to find specific users
-- `max_results` (optional): Maximum number of results to return (default: 50)
-
-**Example:**
-```python
-list_workspace_users(query="engineering", max_results=25)
-```
-
-#### 🔭 `search_directory`
-Performs a targeted search of your organization's Google Workspace directory.
-
-**Parameters:**
-- `query`: Search term to find specific directory members
-- `max_results` (optional): Maximum number of results to return (default: 20)
-
-**Example:**
-```python
-search_directory(query="product manager", max_results=10)
-```
-
-#### 👥 `get_other_contacts`
-Retrieves contacts from the 'Other contacts' section - people you've interacted with but haven't added to your contacts.
-
-**Parameters:**
-- `max_results` (optional): Maximum number of results to return (default: 50)
-
-**Example:**
-```python
-get_other_contacts(max_results=30)
-```
+1. **Search actually works** - `search_contacts` and `list_contacts` with filters now return proper results
+2. **More fields supported** - `create_contact` and `update_contact` now accept many more parameters
+3. **Better performance** - Large contact lists are handled efficiently
+4. **Rich formatting** - Contact display is much more informative
 
 ## 🔒 Permissions
 
 When first running the server, you'll need to authenticate with Google and grant the necessary permissions to access your contacts. The authentication flow will guide you through this process.
 
+The server requires these OAuth scopes:
+- `https://www.googleapis.com/auth/contacts` - Full contacts access
+- `https://www.googleapis.com/auth/directory.readonly` - Google Workspace directory access
+
+## 📈 **Performance Notes**
+
+- **Large contact lists**: The server now efficiently handles 1000+ contacts with pagination
+- **Search optimization**: Server-side search is attempted first, with intelligent fallback
+- **API efficiency**: Only requested fields are retrieved to minimize bandwidth
+- **Caching**: Smart caching reduces redundant API calls
+
 ## ❓ Troubleshooting
 
-- **🔐 Authentication Issues**: Ensure your credentials are valid and have the necessary scopes
-- **⚠️ API Limits**: Be aware of Google People API quota limits
-- **📝 Logs**: Check the console output for error messages and debugging information
+### 🔍 **Search Issues**
+- **Problem**: Search returns no results
+- **Solution**: Use the enhanced `search_contacts` tool with server-side search
+
+### 📝 **Field Update Issues**  
+- **Problem**: Can't update organization, addresses, etc.
+- **Solution**: Use `update_contact` (now supports 11 fields) or `update_contact_advanced` (supports all fields)
+
+### 🚀 **Performance Issues**
+- **Problem**: Slow with large contact lists
+- **Solution**: Use pagination with `max_results` parameter and `include_all_fields=False` when possible
+
+### 🔐 **Authentication Issues**
+- Ensure your credentials are valid and have the necessary scopes
+- Check that the People API is enabled in your Google Cloud project
+
+### ⚠️ **API Limits**
+- Be aware of Google People API quota limits
+- The server now optimizes API usage to stay within limits
 
 ## 👥 Contributing
 
@@ -283,3 +363,29 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+## 📋 **Issue Resolution Summary**
+
+This enhanced version specifically addresses all the issues mentioned:
+
+### ✅ **Search Functionality - FIXED**
+- ✅ `search_contacts` now works with server-side search + intelligent fallback
+- ✅ `list_contacts` with `name_filter` actually filters results
+- ✅ Phone number searches work properly
+- ✅ Directory/workspace searches handle authentication properly
+
+### ✅ **Field Limitations - FIXED**  
+- ✅ Basic tools now support 11 fields (vs 4 before)
+- ✅ Advanced tools support all 25+ Google Contacts fields
+- ✅ Multiple emails, phones, addresses supported
+- ✅ Relationships, birthdays, organizations, custom fields all supported
+
+### ✅ **Performance Issues - FIXED**
+- ✅ Efficient pagination for large contact lists
+- ✅ Smart API usage reduces calls
+- ✅ Server-side search when available
+- ✅ Proper field selection to minimize bandwidth
+
+**Bottom line**: The MCP now provides comprehensive Google Contacts functionality matching the full web interface capabilities!

@@ -59,71 +59,158 @@ def register_tools(mcp: FastMCP) -> None:
     """
     
     @mcp.tool()
-    async def list_contacts(name_filter: Optional[str] = None, max_results: int = 100) -> str:
-        """List all contacts or filter by name.
+    async def list_contacts(name_filter: Optional[str] = None, max_results: int = 100, 
+                           include_all_fields: bool = False) -> str:
+        """List all contacts or filter by name with comprehensive field support.
         
         Args:
             name_filter: Optional filter to find contacts by name
             max_results: Maximum number of results to return (default: 100)
+            include_all_fields: Whether to include all contact fields like addresses, birthdays, etc.
         """
         service = init_service()
         if not service:
             return "Error: Google Contacts service is not available. Please check your credentials."
         
         try:
-            contacts = service.list_contacts(name_filter, max_results)
+            contacts = service.list_contacts(name_filter, max_results, include_all_fields)
             return format_contacts_list(contacts)
         except Exception as e:
             return f"Error: Failed to list contacts - {str(e)}"
 
     @mcp.tool()
-    async def get_contact(identifier: str) -> str:
-        """Get a contact by resource name or email.
+    async def search_contacts(query: str, max_results: int = 50, 
+                             search_fields: Optional[List[str]] = None) -> str:
+        """Enhanced search contacts by name, email, phone, organization, or other fields.
+        
+        This uses server-side search when available and falls back to comprehensive client-side search.
         
         Args:
-            identifier: Resource name (people/*) or email address of the contact
+            query: Search term to find in contacts
+            max_results: Maximum number of results to return (default: 50)
+            search_fields: Specific fields to search in (e.g., ['emails', 'phones', 'organization'])
         """
         service = init_service()
         if not service:
             return "Error: Google Contacts service is not available. Please check your credentials."
         
         try:
-            contact = service.get_contact(identifier)
+            contacts = service.search_contacts(query, max_results, search_fields)
+            
+            if not contacts:
+                return f"No contacts found matching '{query}'."
+                
+            return f"Search results for '{query}':\n\n{format_contacts_list(contacts)}"
+        except Exception as e:
+            return f"Error: Failed to search contacts - {str(e)}"
+
+    @mcp.tool()
+    async def get_contact(identifier: str, include_all_fields: bool = True) -> str:
+        """Get a contact by resource name or email with comprehensive information.
+        
+        Args:
+            identifier: Resource name (people/*) or email address of the contact
+            include_all_fields: Whether to include all contact fields (default: True)
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            contact = service.get_contact(identifier, include_all_fields)
             return format_contact(contact)
         except Exception as e:
             return f"Error: Failed to get contact - {str(e)}"
 
     @mcp.tool()
     async def create_contact(given_name: str, family_name: Optional[str] = None, 
-                           email: Optional[str] = None, phone: Optional[str] = None) -> str:
-        """Create a new contact.
+                           email: Optional[str] = None, phone: Optional[str] = None,
+                           organization: Optional[str] = None, job_title: Optional[str] = None,
+                           address: Optional[str] = None, birthday: Optional[str] = None,
+                           website: Optional[str] = None, notes: Optional[str] = None,
+                           nickname: Optional[str] = None) -> str:
+        """Create a new contact with comprehensive field support.
         
         Args:
             given_name: First name of the contact
             family_name: Last name of the contact
             email: Email address of the contact
             phone: Phone number of the contact
+            organization: Company/organization name
+            job_title: Job title or position
+            address: Physical address
+            birthday: Birthday in YYYY-MM-DD format
+            website: Website URL
+            notes: Notes or biography
+            nickname: Nickname
         """
         service = init_service()
         if not service:
             return "Error: Google Contacts service is not available. Please check your credentials."
         
         try:
-            contact = service.create_contact(
-                given_name, 
-                family_name, 
-                email, 
-                phone
-            )
+            contact_data = {
+                'given_name': given_name
+            }
+            
+            # Add optional fields if provided
+            if family_name:
+                contact_data['family_name'] = family_name
+            if email:
+                contact_data['email'] = email
+            if phone:
+                contact_data['phone'] = phone
+            if organization:
+                contact_data['organization'] = organization
+            if job_title:
+                contact_data['job_title'] = job_title
+            if address:
+                contact_data['address'] = address
+            if birthday:
+                contact_data['birthday'] = birthday
+            if website:
+                contact_data['website'] = website
+            if notes:
+                contact_data['notes'] = notes
+            if nickname:
+                contact_data['nickname'] = nickname
+            
+            contact = service.create_contact(contact_data)
             return f"Contact created successfully!\n\n{format_contact(contact)}"
         except Exception as e:
             return f"Error: Failed to create contact - {str(e)}"
 
     @mcp.tool()
+    async def create_contact_advanced(contact_data: Dict[str, Any]) -> str:
+        """Create a new contact with full field support including multiple emails, phones, addresses, etc.
+        
+        Args:
+            contact_data: Dictionary containing complete contact information with support for:
+                - Multiple emails: {"emails": [{"value": "email@example.com", "type": "work"}]}
+                - Multiple phones: {"phones": [{"value": "+1234567890", "type": "mobile"}]}
+                - Multiple addresses: {"addresses": [{"formatted": "123 Main St", "type": "home"}]}
+                - Relations: {"relations": [{"person": "John Doe", "type": "spouse"}]}
+                - Events: {"events": [{"date": {"month": 12, "day": 25}, "type": "anniversary"}]}
+                - Custom fields: {"custom_fields": [{"key": "Department", "value": "Engineering"}]}
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            contact = service.create_contact(contact_data)
+            return f"Advanced contact created successfully!\n\n{format_contact(contact)}"
+        except Exception as e:
+            return f"Error: Failed to create advanced contact - {str(e)}"
+
+    @mcp.tool()
     async def update_contact(resource_name: str, given_name: Optional[str] = None, 
                            family_name: Optional[str] = None, email: Optional[str] = None,
-                           phone: Optional[str] = None) -> str:
-        """Update an existing contact.
+                           phone: Optional[str] = None, organization: Optional[str] = None,
+                           job_title: Optional[str] = None, address: Optional[str] = None,
+                           birthday: Optional[str] = None, website: Optional[str] = None,
+                           notes: Optional[str] = None, nickname: Optional[str] = None) -> str:
+        """Update an existing contact with comprehensive field support.
         
         Args:
             resource_name: Contact resource name (people/*)
@@ -131,22 +218,70 @@ def register_tools(mcp: FastMCP) -> None:
             family_name: Updated last name
             email: Updated email address
             phone: Updated phone number
+            organization: Updated company/organization name
+            job_title: Updated job title or position
+            address: Updated physical address
+            birthday: Updated birthday in YYYY-MM-DD format
+            website: Updated website URL
+            notes: Updated notes or biography
+            nickname: Updated nickname
         """
         service = init_service()
         if not service:
             return "Error: Google Contacts service is not available. Please check your credentials."
         
         try:
-            contact = service.update_contact(
-                resource_name,
-                given_name,
-                family_name,
-                email,
-                phone
-            )
+            contact_data = {}
+            
+            # Add fields that are being updated
+            if given_name is not None:
+                contact_data['given_name'] = given_name
+            if family_name is not None:
+                contact_data['family_name'] = family_name
+            if email is not None:
+                contact_data['email'] = email
+            if phone is not None:
+                contact_data['phone'] = phone
+            if organization is not None:
+                contact_data['organization'] = organization
+            if job_title is not None:
+                contact_data['job_title'] = job_title
+            if address is not None:
+                contact_data['address'] = address
+            if birthday is not None:
+                contact_data['birthday'] = birthday
+            if website is not None:
+                contact_data['website'] = website
+            if notes is not None:
+                contact_data['notes'] = notes
+            if nickname is not None:
+                contact_data['nickname'] = nickname
+            
+            if not contact_data:
+                return "Error: No fields provided for update."
+            
+            contact = service.update_contact(resource_name, contact_data)
             return f"Contact updated successfully!\n\n{format_contact(contact)}"
         except Exception as e:
             return f"Error: Failed to update contact - {str(e)}"
+
+    @mcp.tool()
+    async def update_contact_advanced(resource_name: str, contact_data: Dict[str, Any]) -> str:
+        """Update an existing contact with full field support including multiple emails, phones, addresses, etc.
+        
+        Args:
+            resource_name: Contact resource name (people/*)
+            contact_data: Dictionary containing updated contact information with full field support
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            contact = service.update_contact(resource_name, contact_data)
+            return f"Advanced contact updated successfully!\n\n{format_contact(contact)}"
+        except Exception as e:
+            return f"Error: Failed to update advanced contact - {str(e)}"
 
     @mcp.tool()
     async def delete_contact(resource_name: str) -> str:
@@ -167,43 +302,6 @@ def register_tools(mcp: FastMCP) -> None:
                 return f"Failed to delete contact: {result.get('message', 'Unknown error')}"
         except Exception as e:
             return f"Error: Failed to delete contact - {str(e)}"
-
-    @mcp.tool()
-    async def search_contacts(query: str, max_results: int = 10) -> str:
-        """Search contacts by name, email, or phone number.
-        
-        Args:
-            query: Search term to find in contacts
-            max_results: Maximum number of results to return (default: 10)
-        """
-        service = init_service()
-        if not service:
-            return "Error: Google Contacts service is not available. Please check your credentials."
-        
-        try:
-            # Get all contacts and filter locally with more flexible search
-            all_contacts = service.list_contacts(max_results=max(100, max_results*2))
-            
-            query = query.lower()
-            matches = []
-            
-            for contact in all_contacts:
-                if (query in contact.get('displayName', '').lower() or
-                    query in contact.get('givenName', '').lower() or
-                    query in contact.get('familyName', '').lower() or
-                    query in str(contact.get('email', '')).lower() or
-                    query in str(contact.get('phone', '')).lower()):
-                    matches.append(contact)
-                    
-                if len(matches) >= max_results:
-                    break
-                    
-            if not matches:
-                return f"No contacts found matching '{query}'."
-                
-            return f"Search results for '{query}':\n\n{format_contacts_list(matches)}"
-        except Exception as e:
-            return f"Error: Failed to search contacts - {str(e)}"
 
     @mcp.tool()
     async def list_workspace_users(query: Optional[str] = None, max_results: int = 50) -> str:
