@@ -6,9 +6,7 @@ Conversation Protocol (MCP).
 
 import argparse
 import os
-import sys
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 

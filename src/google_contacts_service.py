@@ -751,7 +751,16 @@ class GoogleContactsService:
         current_person: Optional[Dict[str, Any]],
     ) -> None:
         """Build email and phone sections of contact body."""
-        # Email addresses (support multiple)
+        self._build_email_addresses(body, contact_data, current_person)
+        self._build_phone_numbers(body, contact_data, current_person)
+
+    def _build_email_addresses(
+        self,
+        body: Dict[str, Any],
+        contact_data: Dict[str, Any],
+        current_person: Optional[Dict[str, Any]],
+    ) -> None:
+        """Build email addresses section of contact body."""
         if "emails" in contact_data:
             emails = []
             for email_data in contact_data["emails"]:
@@ -773,7 +782,13 @@ class GoogleContactsService:
                 emails = [{"value": contact_data["email"]}]
             body["emailAddresses"] = emails
 
-        # Phone numbers (support multiple)
+    def _build_phone_numbers(
+        self,
+        body: Dict[str, Any],
+        contact_data: Dict[str, Any],
+        current_person: Optional[Dict[str, Any]],
+    ) -> None:
+        """Build phone numbers section of contact body."""
         if "phones" in contact_data:
             phones = []
             for phone_data in contact_data["phones"]:
