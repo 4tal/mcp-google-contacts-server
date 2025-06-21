@@ -408,6 +408,84 @@ The server requires these OAuth scopes:
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## 🔧 Development
+
+This section is for contributors and developers who want to work on the codebase.
+
+### Development Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/rayanzaki/mcp-google-contacts-server
+cd mcp-google-contacts-server
+
+# Install dependencies (including dev dependencies)
+uv sync --dev
+
+# Install pre-commit hooks (optional but recommended)
+uv run pre-commit install
+```
+
+### Code Quality & Linting
+
+This project uses comprehensive linting and formatting tools to maintain code quality:
+
+#### 🧹 **Linting Tools Used:**
+- **Black**: Code formatting (100 char line length)
+- **isort**: Import statement sorting and organization
+- **flake8**: Style guide enforcement and error detection
+- **mypy**: Static type checking
+- **pre-commit**: Automated quality checks on commit
+
+#### 🎯 **Quick Commands:**
+
+```bash
+# Auto-fix formatting issues
+./scripts/format.sh
+
+# Run all linting checks
+./scripts/lint.sh
+
+# Run individual tools
+uv run black src/              # Format code
+uv run isort src/              # Sort imports
+uv run flake8 src/             # Check style and errors
+uv run mypy src/               # Type checking
+
+# Pre-commit hooks (run on all files)
+uv run pre-commit run --all-files
+```
+
+#### 📝 **Development Workflow:**
+
+1. **Before committing**: Run `./scripts/format.sh` to auto-fix formatting
+2. **Before pushing**: Run `./scripts/lint.sh` to check for issues  
+3. **Optional**: Install pre-commit hooks for automatic checks
+4. **CI/CD**: All checks run automatically in GitHub Actions
+
+#### ⚙️ **Linting Configuration:**
+
+The linting setup is configured in:
+- **pyproject.toml**: Black, isort, and mypy settings
+- **.flake8**: Flake8 configuration and ignored rules
+- **.pre-commit-config.yaml**: Pre-commit hook definitions
+
+### Testing
+
+```bash
+# Run the contact groups test
+uv run python test_contact_groups.py
+
+# Test individual functionality
+uv run python -c "from src.google_contacts_service import GoogleContactsService; print('✅ Service imports successfully')"
+
+# Install and run all linting checks
+uv sync --dev && ./scripts/lint.sh
+
+# Just format the code
+./scripts/format.sh
+```
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
@@ -461,3 +539,5 @@ Contact groups in Google Contacts are essentially **labels** that help you organ
 - ✅ View group statistics and member counts
 - ✅ Update group names and custom metadata
 - ✅ Delete groups you no longer need
+
+
