@@ -5,7 +5,7 @@ from mcp.server.fastmcp import FastMCP
 import traceback
 
 from google_contacts_service import GoogleContactsService, GoogleContactsError
-from formatters import format_contact, format_contacts_list, format_directory_people
+from formatters import format_contact, format_contacts_list, format_directory_people, format_contact_group, format_contact_groups_list, format_group_membership_result
 from config import config
 
 # Global service instance
@@ -372,3 +372,178 @@ def register_tools(mcp: FastMCP) -> None:
             return f"Other Contacts (people you've interacted with but haven't added):\n\n{formatted_list}\n\n{with_email} of these contacts have email addresses."
         except Exception as e:
             return f"Error: Failed to retrieve other contacts - {str(e)}"
+
+    @mcp.tool()
+    async def list_contact_groups(include_system_groups: bool = True) -> str:
+        """List all contact groups (labels) in your Google Contacts.
+        
+        Contact groups are like labels that help you organize your contacts into categories
+        such as 'Family', 'Work', 'Friends', etc.
+        
+        Args:
+            include_system_groups: Whether to include system groups like "My Contacts", "Starred", etc.
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            groups = service.list_contact_groups(include_system_groups)
+            return format_contact_groups_list(groups)
+        except Exception as e:
+            return f"Error: Failed to list contact groups - {str(e)}"
+
+    @mcp.tool()
+    async def create_contact_group(name: str, client_data: List[Dict[str, str]] = None) -> str:
+        """Create a new contact group (label) to organize your contacts.
+        
+        Args:
+            name: Name for the new contact group (e.g., "Work Colleagues", "Family", "Book Club")
+            client_data: Optional custom data as list of key-value pairs (e.g., [{"key": "color", "value": "blue"}])
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            group = service.create_contact_group(name, client_data)
+            return f"Contact group created successfully!\n\n{format_contact_group(group)}"
+        except Exception as e:
+            return f"Error: Failed to create contact group - {str(e)}"
+
+    @mcp.tool()
+    async def get_contact_group(resource_name: str, include_members: bool = False, max_members: int = 50) -> str:
+        """Get detailed information about a specific contact group.
+        
+        Args:
+            resource_name: Contact group resource name (e.g., "contactGroups/12345")
+            include_members: Whether to include the list of member contact IDs
+            max_members: Maximum number of member IDs to return if include_members is True
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            max_members_param = max_members if include_members else 0
+            group = service.get_contact_group(resource_name, max_members_param)
+            return format_contact_group(group)
+        except Exception as e:
+            return f"Error: Failed to get contact group - {str(e)}"
+
+    @mcp.tool()
+    async def update_contact_group(resource_name: str, name: str, 
+                                 client_data: List[Dict[str, str]] = None) -> str:
+        """Update a contact group's name and custom data.
+        
+        Args:
+            resource_name: Contact group resource name (e.g., "contactGroups/12345")
+            name: New name for the contact group
+            client_data: Optional updated custom data as list of key-value pairs
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            group = service.update_contact_group(resource_name, name, client_data)
+            return f"Contact group updated successfully!\n\n{format_contact_group(group)}"
+        except Exception as e:
+            return f"Error: Failed to update contact group - {str(e)}"
+
+    @mcp.tool()
+    async def delete_contact_group(resource_name: str) -> str:
+        """Delete a contact group. Note: This only works for user-created groups, not system groups.
+        
+        Args:
+            resource_name: Contact group resource name (e.g., "contactGroups/12345")
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            result = service.delete_contact_group(resource_name)
+            if result.get('success'):
+                return f"Contact group {resource_name} deleted successfully."
+            else:
+                return f"Failed to delete contact group: {result.get('message', 'Unknown error')}"
+        except Exception as e:
+            return f"Error: Failed to delete contact group - {str(e)}"
+
+    @mcp.tool()
+    async def add_contacts_to_group(group_resource_name: str, 
+                                  contact_resource_names: List[str]) -> str:
+        """Add contacts to a contact group (assign a label to contacts).
+        
+        Args:
+            group_resource_name: Contact group resource name (e.g., "contactGroups/12345")
+            contact_resource_names: List of contact resource names to add (e.g., ["people/12345", "people/67890"])
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            result = service.add_contacts_to_group(group_resource_name, contact_resource_names)
+            return format_group_membership_result(result, "add")
+        except Exception as e:
+            return f"Error: Failed to add contacts to group - {str(e)}"
+
+    @mcp.tool()
+    async def remove_contacts_from_group(group_resource_name: str, 
+                                       contact_resource_names: List[str]) -> str:
+        """Remove contacts from a contact group (remove a label from contacts).
+        
+        Args:
+            group_resource_name: Contact group resource name (e.g., "contactGroups/12345")
+            contact_resource_names: List of contact resource names to remove (e.g., ["people/12345", "people/67890"])
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            result = service.remove_contacts_from_group(group_resource_name, contact_resource_names)
+            return format_group_membership_result(result, "remove")
+        except Exception as e:
+            return f"Error: Failed to remove contacts from group - {str(e)}"
+
+    @mcp.tool()
+    async def search_contacts_by_group(group_resource_name: str, max_results: int = 50) -> str:
+        """Find all contacts that belong to a specific contact group.
+        
+        This is useful for seeing which contacts have a particular label assigned.
+        
+        Args:
+            group_resource_name: Contact group resource name (e.g., "contactGroups/12345")
+            max_results: Maximum number of contacts to return
+        """
+        service = init_service()
+        if not service:
+            return "Error: Google Contacts service is not available. Please check your credentials."
+        
+        try:
+            # Get the group with member resource names
+            group = service.get_contact_group(group_resource_name, max_results)
+            
+            if not group.get('memberResourceNames'):
+                return f"No contacts found in group '{group.get('name', 'Unknown Group')}'"
+            
+            # Get full contact details for each member
+            member_contacts = []
+            for member_resource_name in group['memberResourceNames']:
+                try:
+                    contact = service.get_contact(member_resource_name, include_all_fields=False)
+                    member_contacts.append(contact)
+                except Exception:
+                    # Skip contacts that can't be retrieved
+                    continue
+            
+            if not member_contacts:
+                return f"No accessible contacts found in group '{group.get('name', 'Unknown Group')}'"
+            
+            group_name = group.get('name', 'Unknown Group')
+            return f"Contacts in group '{group_name}':\n\n{format_contacts_list(member_contacts)}"
+        except Exception as e:
+            return f"Error: Failed to search contacts by group - {str(e)}"

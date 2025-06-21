@@ -353,3 +353,161 @@ def format_directory_people(people: List[Dict[str, Any]], query: Optional[str] =
     formatted_users.append(summary)
     
     return "\n\n".join(formatted_users)
+
+def format_contact_group(group: Dict[str, Any]) -> str:
+    """Format a contact group dictionary into a readable string.
+    
+    Args:
+        group: Dictionary containing contact group information
+        
+    Returns:
+        Formatted string representation of the contact group
+    """
+    if not group:
+        return "No contact group data available"
+        
+    parts = []
+    
+    # Group name and type
+    name = group.get('name', 'Unnamed Group')
+    group_type = group.get('groupType', '').replace('_', ' ').title()
+    if group_type:
+        parts.append(f"📂 {name} ({group_type})")
+    else:
+        parts.append(f"📂 {name}")
+    
+    # Member count
+    member_count = group.get('memberCount', 0)
+    if member_count > 0:
+        parts.append(f"👥 Members: {member_count}")
+    else:
+        parts.append(f"👥 Members: None")
+    
+    # Update time
+    if group.get('updateTime'):
+        parts.append(f"🕒 Last Updated: {group['updateTime']}")
+    
+    # Resource ID
+    if group.get('resourceName'):
+        parts.append(f"🔗 ID: {group['resourceName']}")
+    
+    # Client data
+    if group.get('clientData'):
+        client_data_parts = []
+        for data in group['clientData']:
+            key = data.get('key', '')
+            value = data.get('value', '')
+            if key and value:
+                client_data_parts.append(f"   • {key}: {value}")
+        if client_data_parts:
+            parts.append(f"🔧 Custom Data:\n" + "\n".join(client_data_parts))
+    
+    # Member resource names (if included)
+    if group.get('memberResourceNames'):
+        member_names = group['memberResourceNames']
+        if len(member_names) <= 5:
+            parts.append(f"📋 Member IDs: {', '.join(member_names)}")
+        else:
+            parts.append(f"📋 Member IDs: {', '.join(member_names[:5])} ... (and {len(member_names) - 5} more)")
+    
+    return "\n".join(parts)
+
+def format_contact_groups_list(groups: List[Dict[str, Any]]) -> str:
+    """Format a list of contact groups into a readable string.
+    
+    Args:
+        groups: List of contact group dictionaries
+        
+    Returns:
+        Formatted string representation of the contact groups list
+    """
+    if not groups:
+        return "No contact groups found."
+    
+    parts = []
+    
+    # Separate user and system groups
+    user_groups = [g for g in groups if g.get('groupType') == 'USER_CONTACT_GROUP']
+    system_groups = [g for g in groups if g.get('groupType') == 'SYSTEM_CONTACT_GROUP']
+    
+    if user_groups:
+        parts.append("👤 USER CONTACT GROUPS:")
+        parts.append("")
+        for i, group in enumerate(user_groups, 1):
+            group_summary = _format_contact_group_summary(group, i)
+            parts.append(group_summary)
+            parts.append("")
+    
+    if system_groups:
+        parts.append("🔧 SYSTEM CONTACT GROUPS:")
+        parts.append("")
+        for i, group in enumerate(system_groups, 1):
+            group_summary = _format_contact_group_summary(group, i, is_system=True)
+            parts.append(group_summary)
+            parts.append("")
+    
+    # Summary statistics
+    total_members = sum(group.get('memberCount', 0) for group in groups)
+    parts.append("=" * 50)
+    parts.append(f"📊 Summary: {len(groups)} total groups ({len(user_groups)} user, {len(system_groups)} system)")
+    parts.append(f"👥 Total contacts across all groups: {total_members}")
+    
+    return "\n".join(parts)
+
+def _format_contact_group_summary(group: Dict[str, Any], index: int, is_system: bool = False) -> str:
+    """Format a single contact group as a summary for list display."""
+    icon = "🔧" if is_system else "📂"
+    summary_parts = [f"{icon} Group {index}: {group.get('name', 'Unnamed')}"]
+    
+    # Member count
+    member_count = group.get('memberCount', 0)
+    summary_parts.append(f"  👥 {member_count} member(s)")
+    
+    # Resource name
+    if group.get('resourceName'):
+        summary_parts.append(f"  🔗 {group['resourceName']}")
+    
+    return "\n".join(summary_parts)
+
+def format_group_membership_result(result: Dict[str, Any], operation: str = "modify") -> str:
+    """Format the result of adding/removing contacts from a group.
+    
+    Args:
+        result: Result dictionary from group membership operation
+        operation: Type of operation (add/remove)
+        
+    Returns:
+        Formatted string representation of the operation result
+    """
+    if not result:
+        return f"No result from group membership {operation} operation."
+    
+    parts = []
+    
+    if result.get('success'):
+        parts.append(f"✅ Group membership {operation} operation completed successfully!")
+        
+        if 'added_count' in result:
+            parts.append(f"📥 Added {result['added_count']} contact(s) to group")
+        elif 'removed_count' in result:
+            parts.append(f"📤 Removed {result['removed_count']} contact(s) from group")
+    else:
+        parts.append(f"❌ Group membership {operation} operation failed.")
+    
+    # Handle not found contacts
+    if result.get('not_found'):
+        not_found = result['not_found']
+        parts.append(f"⚠️  {len(not_found)} contact(s) not found:")
+        for contact in not_found:
+            parts.append(f"   • {contact}")
+    
+    # Handle contacts that couldn't be modified
+    if result.get('could_not_add'):
+        parts.append(f"⚠️  Could not add {len(result['could_not_add'])} contact(s)")
+    elif result.get('could_not_remove'):
+        could_not_remove = result['could_not_remove']
+        parts.append(f"⚠️  Could not remove {len(could_not_remove)} contact(s) (last group):")
+        for contact in could_not_remove:
+            parts.append(f"   • {contact}")
+    
+    return "\n".join(parts)

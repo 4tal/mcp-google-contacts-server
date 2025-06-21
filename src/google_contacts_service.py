@@ -915,3 +915,234 @@ class GoogleContactsService:
             })
         
         return contact
+
+    def list_contact_groups(self, include_system_groups: bool = True) -> List[Dict[str, Any]]:
+        """List all contact groups owned by the authenticated user.
+        
+        Args:
+            include_system_groups: Whether to include system contact groups
+            
+        Returns:
+            List of contact group dictionaries
+        """
+        try:
+            response = self.service.contactGroups().list().execute()
+            contact_groups = response.get('contactGroups', [])
+            
+            if not include_system_groups:
+                contact_groups = [group for group in contact_groups 
+                                if group.get('groupType') == 'USER_CONTACT_GROUP']
+            
+            formatted_groups = []
+            for group in contact_groups:
+                formatted_group = self._format_contact_group(group)
+                formatted_groups.append(formatted_group)
+            
+            return formatted_groups
+        
+        except HttpError as error:
+            raise GoogleContactsError(f"Error listing contact groups: {error}")
+    
+    def create_contact_group(self, name: str, client_data: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
+        """Create a new contact group.
+        
+        Args:
+            name: Name for the new contact group
+            client_data: Optional client-specific data
+            
+        Returns:
+            Created contact group dictionary
+        """
+        try:
+            contact_group_body = {
+                'contactGroup': {
+                    'name': name
+                }
+            }
+            
+            if client_data:
+                contact_group_body['contactGroup']['clientData'] = client_data
+            
+            response = self.service.contactGroups().create(body=contact_group_body).execute()
+            return self._format_contact_group(response)
+        
+        except HttpError as error:
+            raise GoogleContactsError(f"Error creating contact group: {error}")
+    
+    def get_contact_group(self, resource_name: str, max_members: int = 0) -> Dict[str, Any]:
+        """Get a specific contact group by resource name.
+        
+        Args:
+            resource_name: Contact group resource name (contactGroups/*)
+            max_members: Maximum number of members to return (0 for metadata only)
+            
+        Returns:
+            Contact group dictionary with member details
+        """
+        try:
+            params = {}
+            if max_members > 0:
+                params['maxMembers'] = max_members
+            
+            response = self.service.contactGroups().get(
+                resourceName=resource_name,
+                **params
+            ).execute()
+            
+            return self._format_contact_group(response, include_members=max_members > 0)
+        
+        except HttpError as error:
+            raise GoogleContactsError(f"Error getting contact group: {error}")
+    
+    def update_contact_group(self, resource_name: str, name: str, 
+                           client_data: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
+        """Update a contact group's name and client data.
+        
+        Args:
+            resource_name: Contact group resource name
+            name: New name for the contact group
+            client_data: Optional updated client data
+            
+        Returns:
+            Updated contact group dictionary
+        """
+        try:
+            # Get current group for etag
+            current_group = self.service.contactGroups().get(resourceName=resource_name).execute()
+            
+            contact_group_body = {
+                'contactGroup': {
+                    'resourceName': resource_name,
+                    'etag': current_group.get('etag'),
+                    'name': name
+                },
+                'updateGroupFields': 'name'
+            }
+            
+            if client_data:
+                contact_group_body['contactGroup']['clientData'] = client_data
+                contact_group_body['updateGroupFields'] = 'name,clientData'
+            
+            response = self.service.contactGroups().update(
+                contactGroup_resourceName=resource_name,
+                body=contact_group_body
+            ).execute()
+            
+            return self._format_contact_group(response)
+        
+        except HttpError as error:
+            raise GoogleContactsError(f"Error updating contact group: {error}")
+    
+    def delete_contact_group(self, resource_name: str) -> Dict[str, Any]:
+        """Delete a contact group.
+        
+        Args:
+            resource_name: Contact group resource name
+            
+        Returns:
+            Success status dictionary
+        """
+        try:
+            self.service.contactGroups().delete(resourceName=resource_name).execute()
+            return {'success': True, 'resourceName': resource_name}
+        
+        except HttpError as error:
+            raise GoogleContactsError(f"Error deleting contact group: {error}")
+    
+    def add_contacts_to_group(self, group_resource_name: str, 
+                            contact_resource_names: List[str]) -> Dict[str, Any]:
+        """Add contacts to a contact group.
+        
+        Args:
+            group_resource_name: Contact group resource name
+            contact_resource_names: List of contact resource names to add
+            
+        Returns:
+            Result dictionary with any errors
+        """
+        try:
+            modify_body = {
+                'resourceNamesToAdd': contact_resource_names
+            }
+            
+            response = self.service.contactGroups().members().modify(
+                resourceName=group_resource_name,
+                body=modify_body
+            ).execute()
+            
+            return {
+                'success': True,
+                'added_count': len(contact_resource_names),
+                'not_found': response.get('notFoundResourceNames', []),
+                'could_not_add': response.get('canNotRemoveLastContactGroupResourceNames', [])
+            }
+        
+        except HttpError as error:
+            raise GoogleContactsError(f"Error adding contacts to group: {error}")
+    
+    def remove_contacts_from_group(self, group_resource_name: str, 
+                                 contact_resource_names: List[str]) -> Dict[str, Any]:
+        """Remove contacts from a contact group.
+        
+        Args:
+            group_resource_name: Contact group resource name
+            contact_resource_names: List of contact resource names to remove
+            
+        Returns:
+            Result dictionary with any errors
+        """
+        try:
+            modify_body = {
+                'resourceNamesToRemove': contact_resource_names
+            }
+            
+            response = self.service.contactGroups().members().modify(
+                resourceName=group_resource_name,
+                body=modify_body
+            ).execute()
+            
+            return {
+                'success': True,
+                'removed_count': len(contact_resource_names),
+                'not_found': response.get('notFoundResourceNames', []),
+                'could_not_remove': response.get('canNotRemoveLastContactGroupResourceNames', [])
+            }
+        
+        except HttpError as error:
+            raise GoogleContactsError(f"Error removing contacts from group: {error}")
+    
+    def _format_contact_group(self, group: Dict[str, Any], include_members: bool = False) -> Dict[str, Any]:
+        """Format a contact group dictionary for display.
+        
+        Args:
+            group: Raw contact group data from API
+            include_members: Whether to include member details
+            
+        Returns:
+            Formatted contact group dictionary
+        """
+        formatted_group = {
+            'resourceName': group.get('resourceName', ''),
+            'name': group.get('name', ''),
+            'formattedName': group.get('formattedName', ''),
+            'groupType': group.get('groupType', ''),
+            'memberCount': group.get('memberCount', 0)
+        }
+        
+        # Add metadata if available
+        if group.get('metadata'):
+            metadata = group['metadata']
+            formatted_group.update({
+                'updateTime': metadata.get('updateTime', ''),
+                'deleted': metadata.get('deleted', False)
+            })
+        
+        # Add client data if available
+        if group.get('clientData'):
+            formatted_group['clientData'] = group['clientData']
+        
+        # Add member resource names if requested and available
+        if include_members and group.get('memberResourceNames'):
+            formatted_group['memberResourceNames'] = group['memberResourceNames']
+        
+        return formatted_group

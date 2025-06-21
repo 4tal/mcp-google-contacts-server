@@ -48,6 +48,7 @@ Now supports **25+ contact fields** including:
 - **Smart Formatting**: Rich, emoji-enhanced display with contact statistics
 - **Efficient Pagination**: Handle thousands of contacts efficiently
 - **Google Workspace Integration**: Directory search and user management
+- **Contact Group Management**: Full label/group management with organization features
 
 ## 🚀 Installation
 
@@ -195,6 +196,19 @@ To use this server with MCP clients (like Anthropic's Claude with Cline), add it
 | `update_contact_advanced` | Update contact with full field support | ✅ All fields, ✅ Complex data structures |
 | `delete_contact` | Delete a contact | ✅ Enhanced error handling |
 
+### 📂 **Contact Group (Label) Management**
+
+| Tool | Description | Features |
+|------|-------------|----------|
+| `list_contact_groups` | List all contact groups/labels | ✅ User & system groups, ✅ Rich formatting |
+| `create_contact_group` | Create new contact group/label | ✅ Custom data support |
+| `get_contact_group` | Get detailed group information | ✅ Member lists, ✅ Metadata |
+| `update_contact_group` | Update group name and data | ✅ Full field support |
+| `delete_contact_group` | Delete user-created groups | ✅ Safety checks |
+| `add_contacts_to_group` | Add contacts to a group (assign label) | ✅ Batch operations, ✅ Error handling |
+| `remove_contacts_from_group` | Remove contacts from group | ✅ Batch operations, ✅ Safety checks |
+| `search_contacts_by_group` | Find contacts in specific group | ✅ Full contact details |
+
 ### 🏢 **Google Workspace Tools**
 
 | Tool | Description | Features |
@@ -283,6 +297,40 @@ list_contacts(name_filter="Smith", max_results=20)
 
 # Get statistics about your contacts
 list_contacts(max_results=1000)  # Shows statistics at the bottom
+```
+
+### 📂 **Contact Group (Label) Management Examples**
+
+```python
+# List all contact groups
+list_contact_groups()
+
+# List only user-created groups (exclude system groups)
+list_contact_groups(include_system_groups=False)
+
+# Create a new contact group
+create_contact_group("Work Colleagues")
+
+# Create a group with custom data
+create_contact_group("Book Club", client_data=[{"key": "color", "value": "blue"}])
+
+# Get detailed information about a group
+get_contact_group("contactGroups/12345", include_members=True, max_members=100)
+
+# Update a group's name
+update_contact_group("contactGroups/12345", "Updated Work Team")
+
+# Add contacts to a group (assign label)
+add_contacts_to_group("contactGroups/12345", ["people/67890", "people/11111"])
+
+# Remove contacts from a group
+remove_contacts_from_group("contactGroups/12345", ["people/67890"])
+
+# Find all contacts in a specific group
+search_contacts_by_group("contactGroups/12345")
+
+# Delete a user-created group
+delete_contact_group("contactGroups/12345")
 ```
 
 ## 📊 **Field Support Comparison**
@@ -389,3 +437,27 @@ This enhanced version specifically addresses all the issues mentioned:
 - ✅ Proper field selection to minimize bandwidth
 
 **Bottom line**: The MCP now provides comprehensive Google Contacts functionality matching the full web interface capabilities!
+
+## 📂 Understanding Contact Groups (Labels)
+
+Contact groups in Google Contacts are essentially **labels** that help you organize your contacts. Think of them as folders or tags:
+
+### 🏷️ **What are Contact Groups?**
+- **User Groups**: Custom labels you create (e.g., "Family", "Work", "Book Club")
+- **System Groups**: Built-in groups like "My Contacts", "Starred contacts", "Coworkers"
+- **Multiple Labels**: Each contact can belong to multiple groups simultaneously
+
+### 🎯 **Common Use Cases**
+- **Family & Friends**: Group personal contacts by relationship
+- **Work Organization**: Separate colleagues, clients, vendors
+- **Event Planning**: Group contacts for weddings, parties, meetings
+- **Interest Groups**: Book clubs, sports teams, hobby groups
+- **Geographic**: Organize by location or region
+
+### ⚡ **What You Can Do**
+- ✅ Create unlimited custom groups
+- ✅ Add/remove contacts from groups in bulk
+- ✅ Search for all contacts in a specific group
+- ✅ View group statistics and member counts
+- ✅ Update group names and custom metadata
+- ✅ Delete groups you no longer need
