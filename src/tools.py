@@ -1,8 +1,7 @@
 """MCP tools implementation for Google Contacts."""
 
-import asyncio
 import traceback
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -68,6 +67,13 @@ def register_tools(mcp: FastMCP) -> None:
     Args:
         mcp: FastMCP server instance
     """
+    register_contact_tools(mcp)
+    register_directory_tools(mcp)
+    register_contact_group_tools(mcp)
+
+
+def register_contact_tools(mcp: FastMCP) -> None:
+    """Register contact management tools with the MCP server."""
 
     @mcp.tool()
     async def list_contacts(
@@ -329,6 +335,10 @@ def register_tools(mcp: FastMCP) -> None:
         except Exception as e:
             return f"Error: Failed to delete contact - {str(e)}"
 
+
+def register_directory_tools(mcp: FastMCP) -> None:
+    """Register directory and workspace tools with the MCP server."""
+
     @mcp.tool()
     async def list_workspace_users(query: Optional[str] = None, max_results: int = 50) -> str:
         """List Google Workspace users in your organization's directory.
@@ -398,6 +408,10 @@ def register_tools(mcp: FastMCP) -> None:
             return f"Other Contacts (people you've interacted with but haven't added):\n\n{formatted_list}\n\n{with_email} of these contacts have email addresses."
         except Exception as e:
             return f"Error: Failed to retrieve other contacts - {str(e)}"
+
+
+def register_contact_group_tools(mcp: FastMCP) -> None:
+    """Register contact group management tools with the MCP server."""
 
     @mcp.tool()
     async def list_contact_groups(include_system_groups: bool = True) -> str:

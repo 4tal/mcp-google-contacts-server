@@ -1,6 +1,8 @@
+"""Configuration module for Google Contacts MCP server."""
+
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 

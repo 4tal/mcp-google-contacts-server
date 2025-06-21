@@ -1,3 +1,5 @@
+"""Google Contacts service implementation for MCP server."""
+
 import json
 import os
 from pathlib import Path
@@ -85,7 +87,7 @@ class GoogleContactsService:
                 credentials_info = json.load(file)
 
             return cls(credentials_info, token_path)
-        except (FileNotFoundError, json.JSONDecodeError, IOError) as e:
+        except (json.JSONDecodeError, IOError) as e:
             raise GoogleContactsError(
                 f"Failed to load credentials from {credentials_path}: {str(e)}"
             )
@@ -705,6 +707,23 @@ class GoogleContactsService:
         """Build contact body for create/update operations with comprehensive field support."""
         body = {}
 
+        # Build different sections of the contact body
+        self._build_names_section(body, contact_data, current_person)
+        self._build_contact_info_section(body, contact_data, current_person)
+        self._build_addresses_section(body, contact_data)
+        self._build_organization_section(body, contact_data, current_person)
+        self._build_personal_info_section(body, contact_data)
+        self._build_additional_fields_section(body, contact_data)
+
+        return body
+
+    def _build_names_section(
+        self,
+        body: Dict[str, Any],
+        contact_data: Dict[str, Any],
+        current_person: Optional[Dict[str, Any]],
+    ) -> None:
+        """Build names and nicknames section of contact body."""
         # Names
         if "given_name" in contact_data or "family_name" in contact_data:
             names = []
@@ -725,6 +744,13 @@ class GoogleContactsService:
         if "nickname" in contact_data:
             body["nicknames"] = [{"value": contact_data["nickname"]}]
 
+    def _build_contact_info_section(
+        self,
+        body: Dict[str, Any],
+        contact_data: Dict[str, Any],
+        current_person: Optional[Dict[str, Any]],
+    ) -> None:
+        """Build email and phone sections of contact body."""
         # Email addresses (support multiple)
         if "emails" in contact_data:
             emails = []
@@ -769,7 +795,8 @@ class GoogleContactsService:
                 phones = [{"value": contact_data["phone"]}]
             body["phoneNumbers"] = phones
 
-        # Addresses
+    def _build_addresses_section(self, body: Dict[str, Any], contact_data: Dict[str, Any]) -> None:
+        """Build addresses section of contact body."""
         if "addresses" in contact_data:
             addresses = []
             for addr_data in contact_data["addresses"]:
@@ -781,7 +808,13 @@ class GoogleContactsService:
         elif "address" in contact_data:
             body["addresses"] = [{"formattedValue": contact_data["address"]}]
 
-        # Organizations
+    def _build_organization_section(
+        self,
+        body: Dict[str, Any],
+        contact_data: Dict[str, Any],
+        current_person: Optional[Dict[str, Any]],
+    ) -> None:
+        """Build organization section of contact body."""
         if "organization" in contact_data or "job_title" in contact_data:
             # Preserve existing organization data when updating
             if current_person and current_person.get("organizations"):
@@ -795,6 +828,10 @@ class GoogleContactsService:
                 org["title"] = contact_data["job_title"]
             body["organizations"] = [org]
 
+    def _build_personal_info_section(
+        self, body: Dict[str, Any], contact_data: Dict[str, Any]
+    ) -> None:
+        """Build personal info section (birthday, URLs, notes) of contact body."""
         # Birthday
         if "birthday" in contact_data:
             birthday_data = contact_data["birthday"]
@@ -830,6 +867,10 @@ class GoogleContactsService:
         if "notes" in contact_data:
             body["biographies"] = [{"value": contact_data["notes"]}]
 
+    def _build_additional_fields_section(
+        self, body: Dict[str, Any], contact_data: Dict[str, Any]
+    ) -> None:
+        """Build additional fields section (relations, events, custom fields) of contact body."""
         # Relations
         if "relations" in contact_data:
             relations = []
@@ -848,12 +889,21 @@ class GoogleContactsService:
         if "custom_fields" in contact_data:
             body["userDefined"] = contact_data["custom_fields"]
 
-        return body
-
     def _format_contact_enhanced(self, person: Dict[str, Any]) -> Dict[str, Any]:
         """Format a Google People API person object into a comprehensive contact dictionary."""
         contact = {"resourceName": person.get("resourceName"), "etag": person.get("etag")}
 
+        # Format different sections of the contact
+        self._format_names_data(contact, person)
+        self._format_contact_data(contact, person)
+        self._format_organization_data(contact, person)
+        self._format_personal_data(contact, person)
+        self._format_additional_data(contact, person)
+
+        return contact
+
+    def _format_names_data(self, contact: Dict[str, Any], person: Dict[str, Any]) -> None:
+        """Format names and nicknames data from person object."""
         # Names
         names = person.get("names", [])
         if names:
@@ -874,6 +924,8 @@ class GoogleContactsService:
         if nicknames:
             contact["nickname"] = nicknames[0].get("value", "")
 
+    def _format_contact_data(self, contact: Dict[str, Any], person: Dict[str, Any]) -> None:
+        """Format contact information (emails, phones, addresses) from person object."""
         # Email addresses
         emails = person.get("emailAddresses", [])
         contact["emails"] = []
@@ -920,7 +972,8 @@ class GoogleContactsService:
                 }
             )
 
-        # Organizations
+    def _format_organization_data(self, contact: Dict[str, Any], person: Dict[str, Any]) -> None:
+        """Format organization data from person object."""
         organizations = person.get("organizations", [])
         if organizations:
             org = organizations[0]
@@ -932,6 +985,8 @@ class GoogleContactsService:
                 }
             )
 
+    def _format_personal_data(self, contact: Dict[str, Any], person: Dict[str, Any]) -> None:
+        """Format personal data (birthday, URLs, notes) from person object."""
         # Birthday
         birthdays = person.get("birthdays", [])
         if birthdays:
@@ -960,6 +1015,8 @@ class GoogleContactsService:
         if biographies:
             contact["notes"] = biographies[0].get("value", "")
 
+    def _format_additional_data(self, contact: Dict[str, Any], person: Dict[str, Any]) -> None:
+        """Format additional data (relations, events, custom fields, etc.) from person object."""
         # Relations
         relations = person.get("relations", [])
         contact["relations"] = []
@@ -1005,8 +1062,6 @@ class GoogleContactsService:
                     )
                 }
             )
-
-        return contact
 
     def list_contact_groups(self, include_system_groups: bool = True) -> List[Dict[str, Any]]:
         """List all contact groups owned by the authenticated user.

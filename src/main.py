@@ -1,6 +1,7 @@
-"""
-MCP Google Contacts Server: A server that provides Google Contacts functionality
-through the Machine Conversation Protocol (MCP).
+"""MCP Google Contacts Server.
+
+A server that provides Google Contacts functionality through the Machine
+Conversation Protocol (MCP).
 """
 
 import argparse
